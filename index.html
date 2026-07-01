@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>groq // chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0a0b0d;
+    --surface: #14171a;
+    --surface-2: #1c2024;
+    --border: #262b30;
+    --text: #f2f1ee;
+    --text-dim: #8b9198;
+    --text-faint: #565c62;
+    --accent: #ff5a1f;
+    --accent-dim: #ff5a1f26;
+    --accent-glow: #ff5a1f55;
+    --error: #ff5555;
+    --radius: 10px;
+    --mono: 'JetBrains Mono', monospace;
+    --display: 'Space Grotesk', sans-serif;
+    --body: 'Inter', sans-serif;
+  }
+
+  *{ box-sizing: border-box; margin:0; padding:0; }
+  html,body{ height:100%; }
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--body);
+    overflow: hidden;
+  }
+
+  /* subtle animated grid backdrop, very quiet */
+  body::before{
+    content:'';
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 48px 48px;
+    opacity: .18;
+    pointer-events:none;
+    z-index:0;
+  }
+
+  .app{
+    position:relative;
+    z-index:1;
+    display:grid;
+    grid-template-columns: 300px 1fr;
+    height:100vh;
+  }
+
+  /* ---------- SIDEBAR ---------- */
+  .sidebar{
+    background: var(--surface);
+    border-right:1px solid var(--border);
+    display:flex;
+    flex-direction:column;
+    padding: 22px 20px;
+    gap: 22px;
+    overflow-y:auto;
+  }
+
+  .brand{
+    display:flex; align-items:center; gap:10px;
+  }
+  .brand svg{ width:22px; height:22px; flex-shrink:0; }
+  .brand .name{
+    font-family: var(--display);
+    font-weight:700;
+    font-size: 18px;
+    letter-spacing: -0.02em;
+  }
+  .brand .name span{ color: var(--accent); }
+  .eyebrow{
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-top:-14px;
+    padding-left:32px;
+  }
+
+  .field{ display:flex; flex-direction:column; gap:7px; }
+  .field label{
+    font-size:11px;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing:.08em;
+    color: var(--text-dim);
+  }
+  .field .hint{
+    font-size: 11px;
+    color: var(--text-faint);
+    line-height:1.5;
+  }
+
+  input[type="password"], input[type="text"], select, textarea{
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-size: 13px;
+    font-family: var(--body);
+    outline: none;
+    transition: border-color .15s ease, box-shadow .15s ease;
+    width: 100%;
+  }
+  input:focus, select:focus, textarea:focus{
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+  select{ appearance:none; cursor:pointer; }
+
+  .toggle-key{
+    display:flex; gap:8px;
+  }
+  .toggle-key input{ flex:1; }
+  .icon-btn{
+    background: var(--surface-2);
+    border:1px solid var(--border);
+    color: var(--text-dim);
+    border-radius:8px;
+    width:36px;
+    flex-shrink:0;
+    cursor:pointer;
+    font-family: var(--mono);
+    font-size:11px;
+  }
+  .icon-btn:hover{ color:var(--text); border-color: var(--text-faint); }
+
+  .slider-row{
+    display:flex; justify-content:space-between; align-items:baseline;
+  }
+  .slider-row .val{ font-family: var(--mono); font-size:12px; color: var(--accent); }
+  input[type="range"]{
+    width:100%;
+    accent-color: var(--accent);
+    background:transparent;
+  }
+
+  .divider{ height:1px; background: var(--border); }
+
+  .stats{
+    display:flex; flex-direction:column; gap:10px;
+    background: var(--surface-2);
+    border:1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+  }
+  .stats .stats-title{
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color: var(--text-faint);
+    display:flex; align-items:center; gap:6px;
+  }
+  .stats .stats-title .dot{
+    width:6px; height:6px; border-radius:50%;
+    background: var(--text-faint);
+  }
+  .stats.live .stats-title .dot{
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
+    animation: pulse 1s infinite;
+  }
+  @keyframes pulse{ 50%{ opacity:.3; } }
+
+  .stat-line{
+    display:flex; justify-content:space-between;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .stat-line .k{ color: var(--text-dim); }
+  .stat-line .v{ color: var(--text); }
+
+  .speedbar{
+    height:6px; border-radius:4px;
+    background: var(--border);
+    overflow:hidden;
+    margin-top:2px;
+  }
+  .speedbar-fill{
+    height:100%;
+    width:0%;
+    background: linear-gradient(90deg, var(--accent), #ffb37a);
+    transition: width .25s ease;
+  }
+
+  .sidebar-footer{ margin-top:auto; display:flex; flex-direction:column; gap:10px; }
+  .clear-btn{
+    background:transparent;
+    border:1px solid var(--border);
+    color: var(--text-dim);
+    padding:9px;
+    border-radius:8px;
+    font-size:12.5px;
+    cursor:pointer;
+    font-family: var(--body);
+    transition: all .15s ease;
+  }
+  .clear-btn:hover{ border-color:#ff555580; color:#ff8a8a; }
+
+  /* ---------- MAIN ---------- */
+  .main{
+    display:flex; flex-direction:column;
+    height:100vh;
+  }
+
+  .topbar{
+    padding: 16px 28px;
+    border-bottom: 1px solid var(--border);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .topbar .model-tag{
+    font-family:var(--mono);
+    font-size:12px;
+    color: var(--text-dim);
+  }
+  .topbar .model-tag b{ color: var(--text); }
+  .topbar .lpu-badge{
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing:.08em;
+    color: var(--accent);
+    border:1px solid var(--accent-dim);
+    background: var(--accent-dim);
+    padding: 4px 9px;
+    border-radius: 20px;
+  }
+
+  .messages{
+    flex:1;
+    overflow-y:auto;
+    padding: 28px 0 10px;
+    display:flex; flex-direction:column;
+    gap: 4px;
+  }
+
+  .empty-state{
+    height:100%;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    gap:14px;
+    color: var(--text-faint);
+    text-align:center;
+    padding: 0 40px;
+  }
+  .empty-state svg{ width:38px; height:38px; opacity:.5; }
+  .empty-state h2{
+    font-family: var(--display);
+    font-size: 20px;
+    color: var(--text-dim);
+    font-weight:600;
+  }
+  .empty-state p{ font-size:13px; max-width:340px; line-height:1.6; }
+
+  .msg{
+    max-width: 720px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 14px 28px;
+    display:flex;
+    gap: 14px;
+  }
+  .msg .avatar{
+    width:26px; height:26px;
+    border-radius:7px;
+    flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-family: var(--mono);
+    font-size:11px;
+    font-weight:600;
+    margin-top:2px;
+  }
+  .msg.user .avatar{ background: var(--surface-2); color: var(--text-dim); border:1px solid var(--border); }
+  .msg.assistant .avatar{ background: var(--accent-dim); color: var(--accent); border:1px solid var(--accent-dim); }
+
+  .msg .content{
+    flex:1;
+    font-size: 14.5px;
+    line-height: 1.65;
+    padding-top:3px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .msg.user .content{ color: var(--text); }
+  .msg.assistant .content{ color: #e9e8e4; }
+
+  .msg .content code{
+    font-family: var(--mono);
+    background: var(--surface-2);
+    padding: 2px 5px;
+    border-radius:4px;
+    font-size: 13px;
+  }
+  .msg .content pre{
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    padding: 12px 14px;
+    border-radius: 8px;
+    overflow-x:auto;
+    margin: 8px 0;
+  }
+  .msg .content pre code{ background:none; padding:0; }
+
+  .cursor{
+    display:inline-block;
+    width: 7px; height: 14px;
+    background: var(--accent);
+    margin-left:2px;
+    animation: blink 0.9s infinite;
+    vertical-align: -2px;
+  }
+  @keyframes blink{ 50%{ opacity:0; } }
+
+  .error-banner{
+    max-width:720px; margin: 0 auto; width:100%;
+    padding: 12px 16px;
+    background: #ff555514;
+    border: 1px solid #ff555540;
+    color: #ff8a8a;
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: var(--mono);
+  }
+
+  /* ---------- COMPOSER ---------- */
+  .composer-wrap{
+    padding: 16px 28px 22px;
+    border-top: 1px solid var(--border);
+  }
+  .composer{
+    max-width: 720px;
+    margin: 0 auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    display:flex;
+    align-items:flex-end;
+    padding: 8px 8px 8px 16px;
+    gap: 8px;
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  .composer:focus-within{
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+  .composer textarea{
+    background:none; border:none; resize:none;
+    max-height: 160px;
+    padding: 10px 0;
+    font-size: 14.5px;
+    line-height:1.5;
+  }
+  .composer textarea:focus{ box-shadow:none; }
+
+  .send-btn{
+    background: var(--accent);
+    border:none;
+    color: #0a0b0d;
+    width: 38px; height:38px;
+    border-radius: 10px;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+    transition: transform .1s ease, opacity .15s ease;
+  }
+  .send-btn:hover{ transform: scale(1.05); }
+  .send-btn:disabled{ opacity:.35; cursor:not-allowed; transform:none; }
+  .send-btn svg{ width:16px; height:16px; }
+
+  .composer-foot{
+    max-width:720px; margin: 8px auto 0;
+    display:flex; justify-content:space-between;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--text-faint);
+    padding: 0 4px;
+  }
+
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb{ background: var(--border); border-radius:4px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+
+  @media (max-width: 760px){
+    .app{ grid-template-columns: 1fr; }
+    .sidebar{
+      position:fixed; inset:0 30% 0 auto;
+      width:76%; max-width:300px;
+      transform: translateX(-100%);
+      transition: transform .2s ease;
+      z-index: 20;
+    }
+    .sidebar.open{ transform:none; }
+    .msg{ padding: 12px 16px; }
+    .composer-wrap{ padding: 12px 14px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar" id="sidebar">
+    <div>
+      <div class="brand">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6Z" fill="#ff5a1f"/></svg>
+        <div class="name">groq<span>chat</span></div>
+      </div>
+      <div class="eyebrow">LPU™ inference · streamed</div>
+    </div>
+
+    <div class="field">
+      <label for="apiKey">Groq API key</label>
+      <div class="toggle-key">
+        <input type="password" id="apiKey" placeholder="gsk_••••••••••••••••" autocomplete="off">
+        <button class="icon-btn" id="toggleKey" title="show/hide">SHOW</button>
+      </div>
+      <div class="hint">Kept in memory for this tab only — never stored or sent anywhere except directly to api.groq.com. Get a free key at console.groq.com.</div>
+    </div>
+
+    <div class="field">
+      <label for="model">Model</label>
+      <select id="model">
+        <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
+        <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
+        <option value="deepseek-r1-distill-llama-70b">deepseek-r1-distill-llama-70b</option>
+        <option value="gemma2-9b-it">gemma2-9b-it</option>
+        <option value="custom">custom…</option>
+      </select>
+    </div>
+    <div class="field" id="customModelField" style="display:none;">
+      <label for="customModel">Custom model id</label>
+      <input type="text" id="customModel" placeholder="e.g. mixtral-8x7b-32768">
+    </div>
+
+    <div class="field">
+      <label for="systemPrompt">System prompt</label>
+      <textarea id="systemPrompt" rows="3" style="resize:vertical; font-family:var(--body); font-size:13px;" placeholder="You are a helpful assistant.">You are a helpful, concise assistant.</textarea>
+    </div>
+
+    <div class="field">
+      <div class="slider-row">
+        <label for="temp">Temperature</label>
+        <span class="val" id="tempVal">0.7</span>
+      </div>
+      <input type="range" id="temp" min="0" max="1.5" step="0.1" value="0.7">
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="stats" id="stats">
+      <div class="stats-title"><span class="dot"></span> generation speed</div>
+      <div class="stat-line"><span class="k">tokens / sec</span><span class="v" id="tps">—</span></div>
+      <div class="speedbar"><div class="speedbar-fill" id="speedbarFill"></div></div>
+      <div class="stat-line"><span class="k">time to first token</span><span class="v" id="ttft">—</span></div>
+      <div class="stat-line"><span class="k">total tokens (est.)</span><span class="v" id="totalTok">—</span></div>
+    </div>
+
+    <div class="sidebar-footer">
+      <button class="clear-btn" id="clearChat">Clear conversation</button>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+    <div class="topbar">
+      <div class="model-tag">model: <b id="modelTagText">llama-3.3-70b-versatile</b></div>
+      <div class="lpu-badge">⚡ GROQ LPU</div>
+    </div>
+
+    <div class="messages" id="messages">
+      <div class="empty-state" id="emptyState">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6Z"/></svg>
+        <h2>Start a conversation</h2>
+        <p>Drop in your Groq API key on the left, pick a model, and send a prompt. Responses stream back token-by-token at Groq's signature speed.</p>
+      </div>
+    </div>
+
+    <div class="composer-wrap">
+      <div class="composer">
+        <textarea id="userInput" rows="1" placeholder="Message groqchat…"></textarea>
+        <button class="send-btn" id="sendBtn" title="Send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        </button>
+      </div>
+      <div class="composer-foot">
+        <span>Enter to send · Shift+Enter for new line</span>
+        <span id="charCount">0</span>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<script>
+(function(){
+  const $ = (id) => document.getElementById(id);
+
+  const apiKeyInput   = $('apiKey');
+  const toggleKeyBtn  = $('toggleKey');
+  const modelSelect   = $('model');
+  const customModelField = $('customModelField');
+  const customModelInput = $('customModel');
+  const systemPromptInput = $('systemPrompt');
+  const tempInput     = $('temp');
+  const tempVal       = $('tempVal');
+  const messagesEl    = $('messages');
+  const emptyState    = $('emptyState');
+  const userInput     = $('userInput');
+  const sendBtn       = $('sendBtn');
+  const clearBtn      = $('clearChat');
+  const charCount     = $('charCount');
+  const modelTagText  = $('modelTagText');
+
+  const statsBox      = $('stats');
+  const tpsEl         = $('tps');
+  const ttftEl        = $('ttft');
+  const totalTokEl    = $('totalTok');
+  const speedbarFill  = $('speedbarFill');
+
+  let history = []; // { role, content }
+  let isStreaming = false;
+
+  // ---- UI wiring ----
+  toggleKeyBtn.addEventListener('click', () => {
+    const isPw = apiKeyInput.type === 'password';
+    apiKeyInput.type = isPw ? 'text' : 'password';
+    toggleKeyBtn.textContent = isPw ? 'HIDE' : 'SHOW';
+  });
+
+  modelSelect.addEventListener('change', () => {
+    customModelField.style.display = modelSelect.value === 'custom' ? 'flex' : 'none';
+    updateModelTag();
+  });
+  customModelInput.addEventListener('input', updateModelTag);
+  function currentModel(){
+    return modelSelect.value === 'custom' ? (customModelInput.value.trim() || 'llama-3.3-70b-versatile') : modelSelect.value;
+  }
+  function updateModelTag(){ modelTagText.textContent = currentModel(); }
+
+  tempInput.addEventListener('input', () => { tempVal.textContent = parseFloat(tempInput.value).toFixed(1); });
+
+  userInput.addEventListener('input', () => {
+    charCount.textContent = userInput.value.length;
+    userInput.style.height = 'auto';
+    userInput.style.height = Math.min(userInput.scrollHeight, 160) + 'px';
+  });
+
+  userInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  sendBtn.addEventListener('click', sendMessage);
+
+  clearBtn.addEventListener('click', () => {
+    history = [];
+    messagesEl.innerHTML = '';
+    messagesEl.appendChild(emptyState);
+    resetStats();
+  });
+
+  function resetStats(){
+    statsBox.classList.remove('live');
+    tpsEl.textContent = '—';
+    ttftEl.textContent = '—';
+    totalTokEl.textContent = '—';
+    speedbarFill.style.width = '0%';
+  }
+
+  // ---- rendering helpers ----
+  function escapeHtml(str){
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // minimal markdown: code blocks, inline code, bold
+  function renderMarkdown(text){
+    let escaped = escapeHtml(text);
+    escaped = escaped.replace(/```([\s\S]*?)```/g, (m, code) => `<pre><code>${code.trim()}</code></pre>`);
+    escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
+    escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    return escaped;
+  }
+
+  function addMessageBubble(role){
+    emptyState.remove();
+    const wrap = document.createElement('div');
+    wrap.className = `msg ${role}`;
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.textContent = role === 'user' ? 'YOU' : '⚡';
+    const content = document.createElement('div');
+    content.className = 'content';
+    wrap.appendChild(avatar);
+    wrap.appendChild(content);
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return content;
+  }
+
+  function showError(msg){
+    const wrap = document.createElement('div');
+    wrap.className = 'error-banner';
+    wrap.textContent = msg;
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  // ---- core send/stream logic ----
+  async function sendMessage(){
+    if (isStreaming) return;
+    const text = userInput.value.trim();
+    if (!text) return;
+
+    const key = apiKeyInput.value.trim();
+    if (!key){
+      showError('Add your Groq API key in the sidebar first.');
+      return;
+    }
+
+    userInput.value = '';
+    userInput.style.height = 'auto';
+    charCount.textContent = '0';
+
+    addMessageBubble('user').textContent = text;
+    history.push({ role: 'user', content: text });
+
+    const assistantContentEl = addMessageBubble('assistant');
+    const cursor = document.createElement('span');
+    cursor.className = 'cursor';
+    assistantContentEl.appendChild(cursor);
+
+    isStreaming = true;
+    sendBtn.disabled = true;
+    statsBox.classList.add('live');
+    tpsEl.textContent = '…';
+    ttftEl.textContent = '…';
+
+    const model = currentModel();
+    const sys = systemPromptInput.value.trim();
+    const messages = sys ? [{ role: 'system', content: sys }, ...history] : [...history];
+
+    let fullText = '';
+    let tokenCount = 0;
+    const startTime = performance.now();
+    let firstTokenTime = null;
+
+    try{
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${key}`
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: parseFloat(tempInput.value),
+          stream: true
+        })
+      });
+
+      if (!response.ok){
+        const errBody = await response.text();
+        let detail = errBody;
+        try { detail = JSON.parse(errBody).error?.message || errBody; } catch(e){}
+        throw new Error(`${response.status} — ${detail}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true){
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines){
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const payload = trimmed.slice(5).trim();
+          if (payload === '[DONE]') continue;
+          try{
+            const json = JSON.parse(payload);
+            const delta = json.choices?.[0]?.delta?.content;
+            if (delta){
+              if (firstTokenTime === null){
+                firstTokenTime = performance.now();
+                ttftEl.textContent = ((firstTokenTime - startTime) / 1000).toFixed(2) + 's';
+              }
+              fullText += delta;
+              tokenCount += Math.max(1, Math.round(delta.length / 4)); // rough estimate
+              assistantContentEl.innerHTML = renderMarkdown(fullText);
+              assistantContentEl.appendChild(cursor);
+              messagesEl.scrollTop = messagesEl.scrollHeight;
+
+              const elapsed = (performance.now() - startTime) / 1000;
+              const tps = elapsed > 0 ? (tokenCount / elapsed) : 0;
+              tpsEl.textContent = tps.toFixed(0);
+              totalTokEl.textContent = tokenCount;
+              speedbarFill.style.width = Math.min(100, tps / 4) + '%';
+            }
+          } catch(e){ /* ignore partial json */ }
+        }
+      }
+
+      cursor.remove();
+      history.push({ role: 'assistant', content: fullText });
+
+    } catch(err){
+      cursor.remove();
+      if (!fullText) assistantContentEl.remove();
+      showError('Request failed: ' + err.message);
+    } finally{
+      isStreaming = false;
+      sendBtn.disabled = false;
+      statsBox.classList.remove('live');
+    }
+  }
+
+  updateModelTag();
+})();
+</script>
+
+</body>
+</html>
